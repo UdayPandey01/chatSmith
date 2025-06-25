@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build && npm run fix-cors",
+    "fix-cors": "tsc -p tsconfig.script.json && if exist scripts\\build\\fix-cors.cjs del scripts\\build\\fix-cors.cjs && ren scripts\\build\\fix-cors.cjs.js fix-cors.cjs && node scripts\\build\\fix-cors.cjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "compile": "tsc"
   },
   "dependencies": {
     "react": "^19.1.0",

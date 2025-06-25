@@ -1,0 +1,38 @@
+{
+  "name": "chatsmith-backend",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": [
+    "onCommand:chatSmith.openChat"
+  ],
+  "description": "",
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "chatSmith.openChat",
+        "title": "ChatSmith: Open Chat"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "glob": "^11.0.3",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/node": "^24.0.4",
+    "@types/vscode": "^1.101.0",
+    "typescript": "^5.8.3"
+  }
+}
