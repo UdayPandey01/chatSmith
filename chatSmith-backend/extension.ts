@@ -17,7 +17,7 @@ type GeminiApiResponse = {
 };
 
 async function fetchGeminiReply(prompt: string): Promise<string> {
-  const apiKey = "AIzaSyBqn3tr6Xl0oDn6n4XXxu9j7hiJJN4M58c";
+  const apiKey = process.env.GEMINI_API_KEY;
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
