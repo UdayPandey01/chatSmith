@@ -3,6 +3,8 @@ import * as path from "path";
 import * as fs from "fs";
 import fetch from "node-fetch";
 import * as glob from "glob";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 type GeminiApiResponse = {
   candidates?: {
@@ -15,7 +17,7 @@ type GeminiApiResponse = {
 };
 
 async function fetchGeminiReply(prompt: string): Promise<string> {
-  const apiKey = "AIzaSyCndkgJOkfXV4aXoRPlVoe-cB4J0OGavqM";
+  const apiKey = "AIzaSyBqn3tr6Xl0oDn6n4XXxu9j7hiJJN4M58c";
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
@@ -113,15 +115,14 @@ export function activate(context: vscode.ExtensionContext) {
             Array.isArray(msg.attachments) &&
             msg.attachments.length > 0
           ) {
-            const fileList = msg.attachments
-              .map((f: any) => f.filename)
-              .join(", ");
+            let fileSection = msg.attachments
+              .map(
+                (f: any) =>
+                  `\n\n---\nFilename: ${f.filename}\nContent:\n${f.content}\n---`
+              )
+              .join("");
+            prompt += `\n\nThe following files are attached for reference:${fileSection}`;
             console.log("[Backend] Received attachments:", msg.attachments);
-            prompt += `\n\n(Reference files: ${fileList})`;
-            msg.attachments.forEach((f: any) => {
-              // Example: save to temp dir, analyze, etc.
-              // fs.writeFileSync(path.join(os.tmpdir(), f.filename), f.isImage ? Buffer.from(f.content.split(",")[1], 'base64') : f.content);
-            });
           }
           const reply = await fetchGeminiReply(prompt);
           panel.webview.postMessage({ type: "response", data: reply });
@@ -151,14 +152,28 @@ export function activate(context: vscode.ExtensionContext) {
               ? workspaceFolders[0].uri.fsPath
               : context.extensionPath;
           const filePath = path.join(projectRoot, msg.filename);
+          console.log(
+            "[Backend] getFileContent request for filename:",
+            msg.filename
+          );
+          console.log("[Backend] Resolved filePath:", filePath);
           try {
             const content = fs.readFileSync(filePath, "utf8");
+            console.log(
+              "[Backend] Successfully read file content for:",
+              msg.filename
+            );
             panel.webview.postMessage({
               type: "fileContent",
               filename: msg.filename,
               content,
             });
           } catch (err: any) {
+            console.error(
+              "[Backend] Error reading file content for:",
+              msg.filename,
+              err.message
+            );
             panel.webview.postMessage({
               type: "fileContent",
               filename: msg.filename,
