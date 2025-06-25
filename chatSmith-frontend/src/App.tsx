@@ -19,7 +19,7 @@ const vscode = (
     };
 
 function useDarkMode() {
-  const [dark] = useState(true); 
+  const [dark] = useState(true);
   useEffect(() => {
     document.body.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
@@ -59,8 +59,11 @@ function App() {
     const handler = (event: MessageEvent) => {
       console.log("[Frontend] Received message:", event.data);
       if (event.data.type === "fileList") {
-        console.log("[Frontend] Received fileList:", event.data.files);
-        setFileList(event.data.files);
+        const normalizedFiles = event.data.files.map((f: string) =>
+          f.replace(/\\/g, "/")
+        );
+        console.log("[Frontend] Received fileList:", normalizedFiles);
+        setFileList(normalizedFiles);
       }
     };
     window.addEventListener("message", handler);
@@ -88,6 +91,8 @@ function App() {
     if (match) {
       setFileQuery(match[1]);
       setShowFileDropdown(true);
+      console.log("[Frontend] File query triggered:", match[1]);
+      console.log("[Frontend] Current fileList:", fileList);
     } else {
       setShowFileDropdown(false);
     }
@@ -99,29 +104,41 @@ function App() {
 
   const insertAtCursor = (filename: string) => {
     if (!textareaRef.current) return;
+    const normFilename = filename.replace(/\\/g, "/");
     const textarea = textareaRef.current;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const value = textarea.value;
-    const before = value.slice(0, start).replace(/@([\w\-./]*)$/, "@");
+    const before = value.slice(0, start).replace(/@([\w\-./\\]*)$/, "@");
     const after = value.slice(end);
-    const newValue = before + filename + " " + after;
+    const newValue = before + normFilename + " " + after;
     setPrompt(newValue);
     setShowFileDropdown(false);
     setTimeout(() => {
       textarea.focus();
-      const newPos = before.length + filename.length + 1;
+      const newPos = before.length + normFilename.length + 1;
       textarea.selectionStart = textarea.selectionEnd = newPos;
     }, 0);
+    console.log("[Frontend] Inserted filename at cursor:", normFilename);
   };
 
   const sendPrompt = async () => {
     if (prompt.trim() === "" || isLoading) return;
     setIsLoading(true);
-    const atFiles = Array.from(prompt.matchAll(/@([\w\-./]+)/g)).map(
-      (m) => m[1]
+    console.log("[Frontend] Sending prompt:", prompt);
+    const atFiles = Array.from(prompt.matchAll(/@([\w\-./\\]+)/g)).map((m) =>
+      m[1].replace(/\\/g, "/")
     );
-    const validFiles = atFiles.filter((fname) => fileList.includes(fname));
+    const normalizedFileList = fileList.map((f) => f.replace(/\\/g, "/"));
+    console.log(
+      "[Frontend] fileList at prompt send (normalized):",
+      JSON.stringify(normalizedFileList)
+    );
+    console.log("[Frontend] @files found in prompt:", JSON.stringify(atFiles));
+    const validFiles = atFiles.filter((fname) =>
+      normalizedFileList.includes(fname)
+    );
+    console.log("[Frontend] Valid files for content fetch:", validFiles);
     const fileContents: Record<string, string | null> = {};
     if (validFiles.length > 0) {
       await Promise.all(
@@ -130,13 +147,21 @@ function App() {
             new Promise<void>((resolve) => {
               const handler = (event: MessageEvent) => {
                 const msg = event.data;
-                if (msg.type === "fileContent" && msg.filename === fname) {
+                if (
+                  msg.type === "fileContent" &&
+                  msg.filename.replace(/\\/g, "/") === fname
+                ) {
                   fileContents[fname] = msg.content;
                   window.removeEventListener("message", handler);
+                  console.log(
+                    `[Frontend] Received fileContent for ${fname}:`,
+                    msg
+                  );
                   resolve();
                 }
               };
               window.addEventListener("message", handler);
+              console.log(`[Frontend] Requesting fileContent for: ${fname}`);
               vscode.postMessage({ type: "getFileContent", filename: fname });
             })
         )
@@ -147,6 +172,7 @@ function App() {
       content: fileContents[fname] ?? "(Could not fetch file content)",
       isImage: false,
     }));
+    console.log("[Frontend] Attachments to send:", attachments);
     const userMessage: Message = {
       type: "user",
       text: prompt,
@@ -165,7 +191,10 @@ function App() {
     const handleMessage = (event: MessageEvent) => {
       const msg = event.data;
       if (msg.type === "fileList") {
-        console.log("[Frontend] Received fileList:", msg.files);
+        console.log(
+          "[Frontend] Received fileList (secondary handler):",
+          msg.files
+        );
         setFileList(msg.files);
       } else if (msg.type === "response") {
         console.log("[Frontend] Received response:", msg.data);
@@ -178,6 +207,18 @@ function App() {
           },
         ]);
         setIsLoading(false);
+      } else if (msg.type === "fileContent") {
+        if (msg.error) {
+          console.error(
+            `[Frontend] Error fetching fileContent for ${msg.filename}:`,
+            msg.error
+          );
+        } else {
+          console.log(
+            `[Frontend] Received fileContent (secondary handler) for ${msg.filename}:`,
+            msg
+          );
+        }
       }
     };
     window.addEventListener("message", handleMessage);
@@ -332,6 +373,19 @@ function App() {
               rows={1}
             />
 
+            {/* Add a div overlay to highlight @filename references visually */}
+            <div className="textarea-overlay">
+              {prompt.split(/(@[\w\-./]+)/g).map((part, idx) =>
+                part.startsWith("@") && fileList.includes(part.slice(1)) ? (
+                  <span key={idx} className="file-reference">
+                    {part}
+                  </span>
+                ) : (
+                  <span key={idx}>{part}</span>
+                )
+              )}
+            </div>
+
             {/* File Dropdown */}
             {showFileDropdown && fileList.length > 0 && (
               <div className="file-dropdown file-dropdown-top">
@@ -343,19 +397,22 @@ function App() {
                     return normF.includes(normQ);
                   })
                   .slice(0, 16)
-                  .map((f) => (
-                    <div
-                      key={f}
-                      className="dropdown-item"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        insertAtCursor(f);
-                      }}
-                    >
-                      <div className="file-icon">📄</div>
-                      <span>{f}</span>
-                    </div>
-                  ))}
+                  .map((f) => {
+                    const normF = f.replace(/\\/g, "/");
+                    return (
+                      <div
+                        key={normF}
+                        className="dropdown-item"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          insertAtCursor(normF);
+                        }}
+                      >
+                        <div className="file-icon">📄</div>
+                        <span>{normF}</span>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>
